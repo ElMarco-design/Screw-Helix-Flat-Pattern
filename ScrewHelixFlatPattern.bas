@@ -1,0 +1,174 @@
+Attribute VB_Name = "ScrewHelixFlatPattern"
+Option Explicit
+
+Sub Main()
+
+    Dim swApp As SldWorks.SldWorks
+    Dim swModel As SldWorks.ModelDoc2
+    Dim sketchSegment As Variant
+    Dim swFeature As SldWorks.Feature
+    Dim swMatDbs As Variant
+    Dim matPath As String
+    Dim featureList() As String
+    Dim count As Long
+    Dim featType As String
+    Dim customBendAllowance As Object
+    Dim status As Boolean
+    Dim result As Long
+    
+    Dim frontPlane As SldWorks.Feature
+    Dim topPlane As SldWorks.Feature
+    Dim rightPlane As SldWorks.Feature
+
+    '---------------------------
+    ' SHOW USERFORM AND COLLECT PARAMETERS (USER INPUT)
+    '---------------------------
+    frmHelixInput.UserCancelled = False
+    frmHelixInput.Show
+    
+    '---------------------------
+    ' CANCEL PROGRAM IN CASE OF CLOSING THE USERFORM
+    '---------------------------
+    If frmHelixInput.UserCancelled = True Then
+        Exit Sub
+    End If
+    
+    Dim outerDiameter As Double
+    Dim innerDiameter As Double
+    Dim pitch As Double
+    Dim thickness As Double
+
+    outerDiameter = CDbl(frmHelixInput.txtOuterDiameter.Text)
+    innerDiameter = CDbl(frmHelixInput.txtInnerDiameter.Text)
+    pitch = CDbl(frmHelixInput.txtPitch.Text)
+    thickness = CDbl(frmHelixInput.txtThickness.Text)
+
+    '---------------------------
+    ' INITIALIZE SOLIDWORKS
+    '---------------------------
+    Set swApp = Application.SldWorks
+    Set swModel = swApp.ActiveDoc
+    
+    '---------------------------
+    ' SEARCH AND SAVE REFERENCE PLANES (LANGUAGE INDEPENDENT)
+    '---------------------------
+    Set swFeature = swModel.FirstFeature
+    count = 0
+    
+    Do While Not swFeature Is Nothing
+    
+        ReDim Preserve featureList(count)
+        featureList(count) = swFeature.Name
+        count = count + 1
+        
+        featType = swFeature.GetTypeName2
+        
+        If featType = "RefPlane" Then
+            
+            If frontPlane Is Nothing Then
+                Set frontPlane = swFeature
+            ElseIf topPlane Is Nothing Then
+                Set topPlane = swFeature
+            ElseIf rightPlane Is Nothing Then
+                Set rightPlane = swFeature
+            End If
+
+        End If
+        
+        Set swFeature = swFeature.GetNextFeature
+    Loop
+
+    '---------------------------
+    ' GEOMETRIC CALCULATIONS
+    '---------------------------
+    Dim PI As Double: PI = 3.14159265
+
+    Dim outerHelixLength As Double
+    Dim innerHelixLength As Double
+    Dim eccentricity As Double
+    Dim radiusLow As Double
+    Dim radiusHigh As Double
+    Dim sweepAngle As Double
+
+    outerHelixLength = Sqr((PI * outerDiameter) ^ 2 + pitch ^ 2)
+    innerHelixLength = Sqr((PI * innerDiameter) ^ 2 + pitch ^ 2)
+
+    eccentricity = (outerDiameter - innerDiameter) / 2
+    radiusLow = (innerHelixLength * eccentricity) / (outerHelixLength - innerHelixLength)
+    radiusHigh = radiusLow + eccentricity
+
+    sweepAngle = 360 - (360 * outerHelixLength) / (PI * 2 * radiusHigh)
+
+    '---------------------------
+    ' CREATE SKETCH
+    '---------------------------
+    frontPlane.Select2 False, 0
+    swModel.SketchManager.InsertSketch True
+
+    swApp.SetUserPreferenceToggle swUserPreferenceToggle_e.swInputDimValOnCreate, False
+
+    'Inner circle
+    Set sketchSegment = swModel.SketchManager.CreateCircle(0#, 0#, 0#, radiusLow / 1000, 0#, 0#)
+
+    'Outer circle
+    Set sketchSegment = swModel.SketchManager.CreateCircle(0#, 0#, 0#, radiusHigh / 1000, 0#, 0#)
+
+    'Radial lines
+    Set sketchSegment = swModel.SketchManager.CreateLine(0#, -radiusLow / 1000, 0#, 0#, -radiusHigh / 1000, 0#)
+
+    swModel.ViewZoomtofit2
+
+    'Second radial line at sweep angle
+    Dim radAngle As Double
+    radAngle = sweepAngle * PI / 180
+
+    Set sketchSegment = swModel.SketchManager.CreateLine( _
+        Sin(radAngle) * (radiusLow / 1000), Cos(radAngle) * (-radiusLow / 1000), 0#, _
+        Sin(radAngle) * (radiusHigh / 1000), Cos(radAngle) * (-radiusHigh / 1000), 0#)
+
+    swModel.ClearSelection2 True
+
+    '---------------------------
+    ' TRIM SKETCH
+    '---------------------------
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", _
+        Sin(radAngle / 2) * (radiusLow / 1000), Cos(radAngle / 2) * (-radiusLow / 1000), 0, True, 0, Nothing, 0)
+    status = swModel.SketchManager.SketchTrim(4, 0, 0, 0)
+
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", _
+        Sin(radAngle / 2) * (radiusHigh / 1000), Cos(radAngle / 2) * (-radiusHigh / 1000), 0, True, 0, Nothing, 0)
+    status = swModel.SketchManager.SketchTrim(4, 0, 0, 0)
+
+    '---------------------------
+    ' DIMENSIONS
+    '---------------------------
+    Dim midRadius As Double
+    midRadius = (radiusHigh - radiusLow) / 2000
+
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", 0, -midRadius, 0, True, 0, Nothing, 0)
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", _
+        Sin(radAngle) * (midRadius), Cos(radAngle) * (-midRadius), 0, True, 0, Nothing, 0)
+
+    swModel.AddDimension2 _
+        Sin(radAngle / 2) * ((radiusHigh + 30) / 1000), _
+        Cos(radAngle / 2) * (-(radiusHigh + 30) / 1000), 0
+
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", 0, radiusHigh / 1000, 0, False, 0, Nothing, 0)
+    swModel.AddDimension2 (radiusHigh + 30) / 1000, 40 / 1000, 0
+
+    status = swModel.Extension.SelectByID2("", "SKETCHSEGMENT", 0, radiusLow / 1000, 0, False, 0, Nothing, 0)
+    swModel.AddDimension2 (radiusHigh + 30) / 1000, -40 / 1000, 0
+
+    swApp.SetUserPreferenceToggle swUserPreferenceToggle_e.swInputDimValOnCreate, True
+
+    '---------------------------
+    ' CREATE SHEET METAL FEATURE
+    '---------------------------
+    Set customBendAllowance = swModel.FeatureManager.CreateCustomBendAllowance()
+    customBendAllowance.KFactor = 0.41
+
+    Set swFeature = swModel.FeatureManager.InsertSheetMetalBaseFlange2( _
+        thickness / 1000, False, thickness / 1000, 0.02, 0.01, False, 0, 0, 1, _
+        customBendAllowance, False, 0, 0.0001, 0.0001, 0.5, True, False, True, True)
+
+End Sub

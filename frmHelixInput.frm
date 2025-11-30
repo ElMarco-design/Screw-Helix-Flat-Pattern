@@ -1,0 +1,126 @@
+VERSION 5.00
+Begin {C62A69F0-16DC-11CE-9E98-00AA00574A4F} frmHelixInput 
+   Caption         =   "Screw Conveyor Helix Flat Pattern Generator"
+   ClientHeight    =   4428
+   ClientLeft      =   120
+   ClientTop       =   468
+   ClientWidth     =   8448.001
+   OleObjectBlob   =   "frmHelixInput.frx":0000
+   StartUpPosition =   1  'CenterOwner
+End
+Attribute VB_Name = "frmHelixInput"
+Attribute VB_GlobalNameSpace = False
+Attribute VB_Creatable = False
+Attribute VB_PredeclaredId = True
+Attribute VB_Exposed = False
+Public UserCancelled As Boolean
+
+Private Sub UserForm_QueryClose(Cancel As Integer, CloseMode As Integer)
+    If CloseMode = vbFormControlMenu Then
+        Cancel = True
+        UserCancelled = True
+        Me.Hide
+    End If
+    
+End Sub
+
+Private Sub cmdOK_Click()
+    If Not ValidateInputs Then Exit Sub
+
+    If txtOuterDiameter.Text = "" Or txtInnerDiameter.Text = "" Or _
+    txtPitch.Text = "" Or txtThickness.Text = "" Then
+        MsgBox "Please fill in all fields."
+        Exit Sub
+    End If
+    
+    Me.Hide
+
+End Sub
+
+Private Sub txtInnerDiameter_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    KeyAscii = ValidateNumericKey(CInt(KeyAscii))
+End Sub
+
+Private Sub txtOuterDiameter_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    KeyAscii = ValidateNumericKey(CInt(KeyAscii))
+End Sub
+
+Private Sub txtPitch_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    KeyAscii = ValidateNumericKey(CInt(KeyAscii))
+End Sub
+
+Private Sub txtThickness_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+    KeyAscii = ValidateNumericKey(CInt(KeyAscii))
+End Sub
+
+
+Function ValidateNumericKey(ByVal KeyAscii As Integer) As Integer
+    ' Allow: digits, backspace, decimal point and comma
+    If (KeyAscii >= 48 And KeyAscii <= 57) Or KeyAscii = 8 Or KeyAscii = 46 Or KeyAscii = 44 Then
+        ValidateNumericKey = KeyAscii
+    Else
+        ValidateNumericKey = 0   ' block other characters
+    End If
+End Function
+
+Function ValidateInputs() As Boolean
+    Dim innerDia As Double
+    Dim outerDia As Double
+    Dim pitch As Double
+    Dim thickness As Double
+    
+    ' Check for empty fields
+    If Trim(txtInnerDiameter.Text) = "" Or _
+       Trim(txtOuterDiameter.Text) = "" Or _
+       Trim(txtPitch.Text) = "" Or _
+       Trim(txtThickness.Text) = "" Then
+           
+        MsgBox "Please fill in all fields.", vbExclamation
+        ValidateInputs = False
+        Exit Function
+    End If
+    
+    ' Convert safely
+    On Error GoTo ConversionError
+    innerDia = CDbl(txtInnerDiameter.Text)
+    outerDia = CDbl(txtOuterDiameter.Text)
+    pitch = CDbl(txtPitch.Text)
+    thickness = CDbl(txtThickness.Text)
+    On Error GoTo 0
+    
+    ' No negative values, no zero where it makes no sense
+    If innerDia <= 0 Or outerDia <= 0 Or pitch <= 0 Or thickness <= 0 Then
+        MsgBox "All values must be greater than zero.", vbExclamation
+        ValidateInputs = False
+        Exit Function
+    End If
+    
+    ' Coherent geometry rules
+    If innerDia >= outerDia Then
+        MsgBox "Outer diameter must be greater than inner diameter.", vbExclamation
+        ValidateInputs = False
+        Exit Function
+    End If
+    
+    ' Thickness must be smaller than half the inner diameter
+    If thickness >= innerDia / 2 Then
+        MsgBox "Thickness is too large for the inner diameter.", vbExclamation
+        ValidateInputs = False
+        Exit Function
+    End If
+    
+    ' Pitch must be reasonable
+    If pitch < (outerDia - innerDia) / 4 Then
+        MsgBox "Pitch value seems too small for this helix geometry.", vbExclamation
+        ValidateInputs = False
+        Exit Function
+    End If
+    
+    ValidateInputs = True
+    Exit Function
+    
+ConversionError:
+    MsgBox "Please enter only numeric values.", vbExclamation
+    ValidateInputs = False
+End Function
+
